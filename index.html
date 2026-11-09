@@ -63,7 +63,14 @@ header button{min-height:42px;padding:4px 12px}
 #drbar .nt{padding:4px 12px}
 #drbar .nt.on,#cambar button.on{background:#6a4bc4;border-color:#6a4bc4;color:#fff}
 body.night #cambar{background:var(--pan2)}body.night #drbar .nt.on,body.night #cambar button.on{background:var(--acc);border-color:var(--acc);color:#000}
-#fileIn{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
+#fileIn,#rjIn{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
+.rjb{display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:3px 9px;border-radius:999px;border:1px solid var(--ln);background:var(--pan2);font-size:14px;font-weight:700;cursor:pointer}
+.rjb small{font-weight:500;opacity:.8}
+.rjh{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:19px;font-weight:800}
+.rjh.g{background:#16391f;color:#b9f5c6}.rjh.y{background:#40360f;color:#ffe9a3}.rjh.r{background:#4a1714;color:#ffc9c3}
+body.light .rjh.g{background:#dcf5e1;color:#14532d}body.light .rjh.y{background:#fff3c4;color:#6b4e00}body.light .rjh.r{background:#fde0de;color:#8a1c16}
+.rjl{margin:0 0 8px;padding:0;list-style:none}.rjl li{padding:7px 0;border-bottom:1px solid var(--ln);font-size:15px}.rjl li:last-child{border-bottom:0}
+.rjl b{font-weight:800}
 #bakbar{padding:6px 12px;background:#4a3b10;color:#f6dd96;font-weight:650;cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.light #bakbar{background:#fbefc8;color:#6b5100}
 .acts2{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:6px;margin-top:8px}
@@ -180,8 +187,9 @@ details summary{font-weight:700;cursor:pointer;min-height:36px;display:flex;alig
     <div class="tgl" id="tgs"></div></section>
   <section class="card hist"><h2>IŠSIŲSTA</h2><div id="hist"></div></section>
   <div class="row" style="margin-bottom:8px"><button class="sm" data-bak="1">💾 Išsaugoti pratybų failą</button><button class="sm" data-load="1">📂 Įkelti failą</button></div>
-  <div class="small mut" style="text-align:center">Duomenys saugomi tik šiame telefone · v17 · TOC lenta v29</div>
+  <div class="small mut" style="text-align:center">Duomenys saugomi tik šiame telefone · v18 · TOC lenta v42</div>
   <input type="file" id="fileIn" tabindex="-1" aria-hidden="true">
+  <input type="file" id="rjIn" tabindex="-1" aria-hidden="true">
 </main>
 <div id="sheet" hidden>
   <div class="sh"><b id="shT"></b><button class="ghost" id="shX" style="font-size:24px">✕</button></div>
@@ -254,7 +262,7 @@ function parseCoord(str){
   if((m=s.match(/LKS(?:[-\s]?94)?[^\d]{0,12}(\d{6,7}(?:[.,]\d+)?)\s*[,;/]?\s*(?:[XY]\s*[=:]?\s*)?(\d{6,7}(?:[.,]\d+)?)/i))||(m=s.match(/\b[XY]\s*[=:]\s*(\d{6,7}(?:[.,]\d+)?)\s*[,;/]?\s*[XY]\s*[=:]\s*(\d{6,7}(?:[.,]\d+)?)/i))){
     const a=cnum(m[1]),b=cnum(m[2]), X=Math.max(a,b), Y=Math.min(a,b);
     if(X>5.8e6&&X<6.5e6&&Y>1e5&&Y<9e5){ const ll=tmInv(Y,X,24,0.9998,500000); const r=out(ll.lat,ll.lon,'','','LKS-94'); if(r) return r; } }
-  /* 5) UTM (35U 316583 6112308, 35U 316583E 6112308N) */
+  /* 5) UTM (35U 582345 6061234, 35U 582345E 6061234N) */
   if((m=s.match(/(?:^|[^\dA-Z])(\d{1,2})\s?([C-HJ-NP-X])\s+(\d{6}(?:[.,]\d+)?)\s*m?\s*E?\s*[,;]?\s+(\d{7}(?:[.,]\d+)?)\s*m?\s*N?(?![\d])/i))){
     const z=+m[1], ll=utm2ll(cnum(m[3]),cnum(m[4]),z,m[2].toUpperCase()<'N'); const r=out(ll.lat,ll.lon,'','','UTM'); if(r) return r; }
   /* 6) dešimtainė pora (55.12345, 24.12345 / 55,12345 24,12345) */
@@ -279,10 +287,200 @@ function bearing(a,b){const f1=a.lat*D2R,f2=b.lat*D2R,dl=(b.lon-a.lon)*D2R;retur
 function mDist(a,b){const z=a.zone,A=a,B=b.zone===z?b:ll2utm(b.lat,b.lon,z);return Math.hypot(B.e-A.e,B.n-A.n);}
 
 /* ============ BŪSENA ============ */
+/* ===== RJ – rajono failas ir ryšio skaičiavimas (bendra lentai ir komandų programėlei) =====
+   Tinklelis UTM metrais: g – žemė (dm, Int16), t – kliūčių aukštis virš žemės (m, Uint8: medžiai, pastatai),
+   c – žemės danga (ESA WorldCover klasės: 10 miškas, 20 krūmai, 30 pievos, 40 laukai, 50 užstatyta, 80 vanduo, 90 pelkės).
+   Ryšys: FSPL + difrakcija (ITU-R P.526, labiausiai kyšanti kliūtis, Žemės kreivumas 4/3 R)
+          + miškas (mažesnis iš: per medžių viršūnes / kiaurai pro medžius – Weissberger, ITU-R P.833)
+          + antenos kryptingumas (12·(θ/kampas)², ne daugiau nei galinė riba). */
+const RJ=(()=>{
+const D2R=Math.PI/180, WA=6378137, FL=1/298.257223563, E2=FL*(2-FL), EP2=E2/(1-E2), K0=0.9996, KR=8494666, ND=-32768;
+const zoneOf=lon=>Math.floor((lon+180)/6)+1;
+function fwd(lat,lon,zone){
+  const lon0=(zone-1)*6-180+3, phi=lat*D2R, lam=(lon-lon0)*D2R, s=Math.sin(phi), co=Math.cos(phi), t=Math.tan(phi);
+  const N=WA/Math.sqrt(1-E2*s*s), T=t*t, C=EP2*co*co, A=co*lam, e4=E2*E2, e6=e4*E2;
+  const M=WA*((1-E2/4-3*e4/64-5*e6/256)*phi-(3*E2/8+3*e4/32+45*e6/1024)*Math.sin(2*phi)+(15*e4/256+45*e6/1024)*Math.sin(4*phi)-(35*e6/3072)*Math.sin(6*phi));
+  return {x:500000+K0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*EP2)*A**5/120),
+          y:(lat<0?1e7:0)+K0*(M+N*t*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*EP2)*A**6/720))};
+}
+function inv(x,y,zone){
+  const lon0=(zone-1)*6-180+3, e1=(1-Math.sqrt(1-E2))/(1+Math.sqrt(1-E2)), M=y/K0;
+  const mu=M/(WA*(1-E2/4-3*E2*E2/64-5*E2**3/256));
+  const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
+  const s=Math.sin(p1), c=Math.cos(p1), t=Math.tan(p1), N1=WA/Math.sqrt(1-E2*s*s), T1=t*t, C1=EP2*c*c, R1=WA*(1-E2)/Math.pow(1-E2*s*s,1.5), D=(x-500000)/(N1*K0);
+  const lat=p1-(N1*t/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*EP2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*EP2-3*C1*C1)*D**6/720);
+  const lon=(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*EP2+24*T1*T1)*D**5/120)/c;
+  return {lat:lat/D2R,lon:lon0+lon/D2R};
+}
+const xy=(G,lat,lon)=>fwd(lat,lon,G.zone);
+/* ---------- skaitymas iš tinklelio ---------- */
+function gAt(G,x,y){
+  const fx=(x-G.x0)/G.step-0.5, fy=(G.y0-y)/G.step-0.5;
+  if(fx<-0.5||fy<-0.5||fx>G.w-0.5||fy>G.h-0.5) return null;
+  const W=G.w, xc=Math.min(Math.max(fx,0),W-1), yc=Math.min(Math.max(fy,0),G.h-1), x0=Math.floor(xc), y0=Math.floor(yc), ax=xc-x0, ay=yc-y0, x1=Math.min(x0+1,W-1), y1=Math.min(y0+1,G.h-1), g=G.g;
+  const a=g[y0*W+x0], b=g[y0*W+x1], c=g[y1*W+x0], d=g[y1*W+x1];
+  if(a===ND||b===ND||c===ND||d===ND){ const v=g[Math.round(yc)*W+Math.round(xc)]; return v===ND?null:v/10; }
+  return ((a*(1-ax)+b*ax)*(1-ay)+(c*(1-ax)+d*ax)*ay)/10;
+}
+function idx(G,x,y){ const i=Math.floor((x-G.x0)/G.step), j=Math.floor((G.y0-y)/G.step); return i<0||j<0||i>=G.w||j>=G.h?-1:j*G.w+i; }
+function inside(G,x,y){ return idx(G,x,y)>=0&&gAt(G,x,y)!=null; }
+/* ---------- kelio geometrija (nepriklauso nuo dažnio) ---------- */
+function path(G,P,hA,T,hB){
+  const dx=T.x-P.x, dy=T.y-P.y, D=Math.hypot(dx,dy), gA=gAt(G,P.x,P.y), gB=gAt(G,T.x,T.y);
+  if(gA==null||gB==null) return {out:true,D};
+  const zA=gA+hA, zB=gB+hB;
+  if(D<1) return {D,zA,zB,qAll:-1e9,qTer:-1e9,veg:0,worst:null,part:false};
+  const st=Math.max(G.step*0.7,D/600), n=Math.max(2,Math.ceil(D/st)), seg=D/n, ex=Math.max(G.step,20);
+  let qAll=-Infinity,qTer=-Infinity,iw=-1,hw=0,kw=0,veg=0,part=false;
+  for(let i=1;i<n;i++){
+    const fr=i/n, d1=D*fr, d2=D-d1, x=P.x+dx*fr, y=P.y+dy*fr, k=idx(G,x,y);
+    if(k<0){part=true;continue;}
+    const gv=G.g[k]; if(gv===ND){part=true;continue;}
+    const g=gv/10, t=G.t[k], c=G.c[k], line=zA+(zB-zA)*fr-d1*d2/(2*KR);
+    const solid=c===50?t:0;
+    if(t>0&&c!==50&&line<g+t&&line>g) veg+=seg;
+    if(d1<ex||d2<ex) continue;
+    const w=Math.sqrt(2*D/(d1*d2)), ha=g+t-line, qa=ha*w, qt=(g+solid-line)*w;
+    if(qa>qAll){qAll=qa;iw=i;hw=ha;kw=t>0?(c===50?2:1):0;}
+    if(qt>qTer) qTer=qt;
+  }
+  return {D,zA,zB,qAll,qTer,veg,part,worst:iw<0?null:{d:D*iw/n,h:hw,kind:kw}};
+}
+const Jnu=nu=>nu>-0.78?6.9+20*Math.log10(Math.sqrt((nu-0.1)**2+1)+nu-0.1):0;
+const Wveg=(f,d)=>{ if(!(d>0)) return 0; const a=Math.pow(f/1000,0.284); return d<=14?0.45*a*d:1.33*a*Math.pow(d,0.588); };
+function lossAt(pg,f){
+  const s=1/Math.sqrt(299.792458/f), jo=Jnu(pg.qAll*s), jt=Jnu(pg.qTer*s)+Wveg(f,pg.veg);
+  return {fspl:20*Math.log10(Math.max(pg.D,1)/1000)+20*Math.log10(f)+32.44,ex:Math.min(jo,jt),thru:jt<jo,jo,jt};
+}
+function antLoss(bw,fb,az0,az,el){
+  if(!(bw>0)||bw>=360) return 0;
+  let th=0; if(az0!=null&&az0!==''&&!isNaN(+az0)) th=Math.abs(((az-(+az0))%360+540)%360-180);
+  return Math.min(12*((th/bw)**2+(el/bw)**2),fb??20);
+}
+/* o: {links:[{n,f,p(dBm),g(dBi),s(dBm),bw(°),fb}], gd (drono antena dBi), loss (dB), az0 (antenos kryptis ° arba null)} */
+function budget(G,P,hA,T,hB,o){
+  const pg=path(G,P,hA,T,hB); if(pg.out) return {out:true,D:pg.D};
+  const az=(Math.atan2(T.x-P.x,T.y-P.y)/D2R+360)%360, el=Math.atan2(pg.zB-pg.zA,Math.max(pg.D,1))/D2R;
+  const L=o.links.filter(k=>k&&k.f>0).map(k=>{ const r=lossAt(pg,k.f), al=antLoss(k.bw,k.fb,o.az0,az,el);
+    return {n:k.n,f:k.f,m:k.p+k.g+(o.gd??2)-(o.loss??3)-r.fspl-r.ex-al-k.s,ex:r.ex,thru:r.thru,al,fspl:r.fspl}; });
+  return {D:pg.D,az,el,links:L,m:L.length?Math.min(...L.map(x=>x.m)):null,worst:pg.worst,veg:pg.veg,part:pg.part};
+}
+const cls=(m,need)=>m==null?'n':m>=need?'g':m>=0?'y':'r';
+/* mažiausias drono aukštis taške T, kad atsarga ≥ need (null – nepasiekiama iki hMax) */
+function minAlt(G,P,hA,T,o,need,hMax){
+  hMax=hMax||600; const ok=h=>{const b=budget(G,P,hA,T,h,o);return !b.out&&b.m!=null&&b.m>=need;};
+  if(ok(0)) return 0; if(!ok(hMax)) return null;
+  let lo=0,hi=hMax; for(let i=0;i<14;i++){const mid=(lo+hi)/2; if(ok(mid)) hi=mid; else lo=mid;} return Math.ceil(hi);
+}
+/* kelyje iki taikinio: didžiausias iš mažiausių aukščių (sunkiausia vieta) */
+function routeAlt(G,P,hA,T,o,need){
+  const D=Math.hypot(T.x-P.x,T.y-P.y), n=Math.max(4,Math.min(40,Math.ceil(D/250))); let best={h:0,d:0};
+  for(let i=1;i<=n;i++){ const fr=i/n, Q={x:P.x+(T.x-P.x)*fr,y:P.y+(T.y-P.y)*fr}; if(!inside(G,Q.x,Q.y)) continue;
+    const h=minAlt(G,P,hA,Q,o,need); if(h==null) return {h:null,d:D*fr}; if(h>best.h) best={h,d:D*fr}; }
+  return best;
+}
+/* ---------- elektros linijos ---------- */
+const lineH=(kv,minor)=>kv>=300?38:kv>=200?32:kv>=100?28:kv>=30?18:kv>=6?11:kv>0?8:minor?10:25;
+function segX(p,q,a,b){ const r={x:q.x-p.x,y:q.y-p.y}, s={x:b.x-a.x,y:b.y-a.y}, d=r.x*s.y-r.y*s.x; if(Math.abs(d)<1e-9) return null;
+  const t=((a.x-p.x)*s.y-(a.y-p.y)*s.x)/d, u=((a.x-p.x)*r.y-(a.y-p.y)*r.x)/d; return t>=0&&t<=1&&u>=0&&u<=1?t:null; }
+function segD(p,a,b){ const vx=b.x-a.x, vy=b.y-a.y, L=vx*vx+vy*vy; let t=L?((p.x-a.x)*vx+(p.y-a.y)*vy)/L:0; t=Math.max(0,Math.min(1,t)); return Math.hypot(p.x-a.x-t*vx,p.y-a.y-t*vy); }
+function wires(G,P,T,near){
+  near=near||150; const D=Math.hypot(T.x-P.x,T.y-P.y), cross=[], nP=[], nT=[];
+  for(const L of (G.lines||[])){ let dp=Infinity,dt=Infinity; const pts=L.p;
+    for(let i=1;i<pts.length;i++){ const a={x:pts[i-1][0],y:pts[i-1][1]}, b={x:pts[i][0],y:pts[i][1]};
+      const t=segX(P,T,a,b); if(t!=null) cross.push({d:t*D,kv:L.kv,h:L.h});
+      dp=Math.min(dp,segD(P,a,b)); dt=Math.min(dt,segD(T,a,b)); }
+    if(dp<=near) nP.push({d:dp,kv:L.kv,h:L.h}); if(dt<=near) nT.push({d:dt,kv:L.kv,h:L.h}); }
+  const srt=a=>a.sort((x,y)=>x.d-y.d);
+  return {cross:srt(cross).filter((c,i,a)=>!i||Math.abs(c.d-a[i-1].d)>30),nearP:srt(nP),nearT:srt(nT)};
+}
+/* ---------- tinklelio paruošimas (lentoje) ----------
+   o: {bb:{s,n,w,e}, step, get(lat,lon)->{dsm,dtm,cls,can}, clsH(cls), treeAdd, progress(fr)} */
+async function build(o){
+  const lat0=(o.bb.s+o.bb.n)/2, zone=zoneOf((o.bb.w+o.bb.e)/2), st=o.step, P=[];
+  for(let i=0;i<=6;i++) for(let j=0;j<=6;j++) P.push(fwd(o.bb.s+(o.bb.n-o.bb.s)*j/6,o.bb.w+(o.bb.e-o.bb.w)*i/6,zone));
+  const x0=Math.floor(Math.min(...P.map(p=>p.x))/st)*st, x1=Math.ceil(Math.max(...P.map(p=>p.x))/st)*st;
+  const y1=Math.floor(Math.min(...P.map(p=>p.y))/st)*st, y0=Math.ceil(Math.max(...P.map(p=>p.y))/st)*st;
+  const w=Math.round((x1-x0)/st), h=Math.round((y0-y1)/st), N=w*h;
+  if(N>25e6) throw new Error('per didelis plotas šiam tinkleliui ('+Math.round(N/1e6)+' mln. langelių) – rinkis retesnį tinklelį arba mažesnę zoną');
+  const S=new Float32Array(N), Gr=new Float32Array(N), C=new Uint8Array(N); let any=0, anyG=0;
+  for(let j=0;j<h;j++){
+    for(let i=0;i<w;i++){ const k=j*w+i, ll=inv(x0+(i+0.5)*st,y0-(j+0.5)*st,zone), v=o.get(ll.lat,ll.lon)||{}, c=v.cls??0; C[k]=c;
+      let s=NaN,g=NaN;
+      if(v.dtm!=null){ g=v.dtm; s=v.dsm!=null?Math.max(v.dsm,g):g+(v.can!=null?Math.max(0,v.can):o.clsH(c)); }
+      else if(v.dsm!=null){ s=v.dsm; if(v.can!=null) g=s-Math.max(0,v.can); else if(!(c===10||c===20||c===50||c===95)) g=s; }
+      S[k]=s; Gr[k]=g; if(!isNaN(s)) any++; if(!isNaN(g)) anyG++; }
+    if(o.progress&&j%40===0){ o.progress(0.8*j/h); await new Promise(r=>setTimeout(r,0)); }
+  }
+  if(!any) throw new Error('zonoje nėra aukščių duomenų – įkelk Copernicus DSM arba LiDAR');
+  /* žemė po mišku / pastatais: užpildoma iš aplinkinių atvirų vietų (normalizuotas glodinimas didėjančiu spinduliu) */
+  if(anyG<any){
+    const sat=(A)=>{ const I=new Float64Array((w+1)*(h+1)); for(let j=0;j<h;j++){let r=0; for(let i=0;i<w;i++){r+=A[j*w+i]; I[(j+1)*(w+1)+i+1]=I[j*(w+1)+i+1]+r;}} return I; };
+    const V=new Float32Array(N), M=new Float32Array(N);
+    for(let k=0;k<N;k++){ if(!isNaN(Gr[k])){V[k]=Gr[k];M[k]=1;} }
+    const IV=sat(V), IM=sat(M);
+    for(const R of [3,6,12,25,50,100,200]){ let left=0;
+      for(let j=0;j<h;j++){ const ja=Math.max(0,j-R), jb=Math.min(h,j+R+1);
+        for(let i=0;i<w;i++){ const k=j*w+i; if(!isNaN(Gr[k])||isNaN(S[k])) continue;
+          const ia=Math.max(0,i-R), ib=Math.min(w,i+R+1), W1=w+1;
+          const m=IM[jb*W1+ib]-IM[ja*W1+ib]-IM[jb*W1+ia]+IM[ja*W1+ia];
+          if(m>=3){ const v=(IV[jb*W1+ib]-IV[ja*W1+ib]-IV[jb*W1+ia]+IV[ja*W1+ia])/m; Gr[k]=Math.min(v,S[k]); } else left++; } }
+      if(o.progress){ o.progress(0.8+0.15*R/200); await new Promise(r=>setTimeout(r,0)); }
+      if(!left) break;
+    }
+    for(let k=0;k<N;k++) if(isNaN(Gr[k])&&!isNaN(S[k])) Gr[k]=S[k]-o.clsH(C[k]);
+  }
+  const g=new Int16Array(N), t=new Uint8Array(N), add=+o.treeAdd||0;
+  for(let k=0;k<N;k++){ if(isNaN(S[k])||isNaN(Gr[k])){g[k]=ND;continue;}
+    const gg=Math.min(Gr[k],S[k]); g[k]=Math.max(-32767,Math.min(32767,Math.round(gg*10)));
+    t[k]=Math.max(0,Math.min(255,Math.round(S[k]-gg+(C[k]===10?add:0)))); }
+  if(o.progress) o.progress(1);
+  return {v:1,zone,x0,y0,step:st,w,h,g,t,c:C,lines:[]};
+}
+/* elektros linijos lat/lon → tinklelio koordinatės, tik dengiančios zoną */
+function addLines(G,L){
+  const pad=500, X0=G.x0-pad, X1=G.x0+G.w*G.step+pad, Y1=G.y0+pad, Y0=G.y0-G.h*G.step-pad;
+  G.lines=L.map(l=>({kv:l.kv||0,h:l.h||lineH(l.kv,l.minor),p:l.pts.map(([lat,lon])=>{const q=fwd(lat,lon,G.zone);return [Math.round(q.x),Math.round(q.y)];})}))
+    .filter(l=>{ if(l.p.length<2) return false; const xs=l.p.map(q=>q[0]), ys=l.p.map(q=>q[1]); return Math.max(...xs)>=X0&&Math.min(...xs)<=X1&&Math.max(...ys)>=Y0&&Math.min(...ys)<=Y1; });
+  return G.lines.length;
+}
+/* ---------- failas: „FPVR“ + antraštė JSON + g,t,c; viskas gzip ---------- */
+async function gz(u8,pack){ const cs=pack?new CompressionStream('gzip'):new DecompressionStream('gzip');
+  return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(cs)).arrayBuffer()); }
+async function encode(G,info){
+  const hdr={kind:'FPV-RAJONAS',v:1,dg:1,zone:G.zone,x0:G.x0,y0:G.y0,step:G.step,w:G.w,h:G.h,made:Date.now(),info:info||{},
+    lines:(G.lines||[]).map(l=>({kv:l.kv,h:l.h,p:l.p.map(([x,y])=>[x-G.x0,G.y0-y])}))};
+  const hj=new TextEncoder().encode(JSON.stringify(hdr)), N=G.w*G.h; let off=8+hj.length; if(off%2) off++;
+  const buf=new Uint8Array(off+N*4), dv=new DataView(buf.buffer);
+  buf.set([70,80,86,82]); dv.setUint32(4,hj.length,true); buf.set(hj,8);
+  for(let j=0;j<G.h;j++){ let pr=0; for(let i=0;i<G.w;i++){ const k=j*G.w+i, v=G.g[k]; dv.setInt16(off+2*k,(v-pr)<<16>>16,true); pr=v; } }   /* eilutės skirtumai – geriau suspaudžia */
+  buf.set(G.t,off+2*N); buf.set(G.c,off+3*N);
+  return gz(buf,true);
+}
+async function decode(u8){
+  if(!(u8[0]===0x1f&&u8[1]===0x8b)) throw new Error('ne rajono failas');
+  const b=await gz(u8,false), dv=new DataView(b.buffer,b.byteOffset,b.byteLength);
+  if(String.fromCharCode(b[0],b[1],b[2],b[3])!=='FPVR') throw new Error('ne rajono failas');
+  const n=dv.getUint32(4,true), H=JSON.parse(new TextDecoder().decode(b.subarray(8,8+n)));
+  if(H.kind!=='FPV-RAJONAS') throw new Error('ne rajono failas');
+  if(H.v>1) throw new Error('failas iš naujesnės lentos versijos – atnaujink programėlę');
+  let off=8+n; if(off%2) off++; const N=H.w*H.h; if(b.length<off+N*4) throw new Error('failas nepilnas');
+  const g=new Int16Array(N);
+  if(H.dg){ for(let j=0;j<H.h;j++){ let pr=0; for(let i=0;i<H.w;i++){ const k=j*H.w+i; pr=(pr+dv.getInt16(off+2*k,true))<<16>>16; g[k]=pr; } } }
+  else for(let k=0;k<N;k++) g[k]=dv.getInt16(off+2*k,true);
+  return {v:H.v,zone:H.zone,x0:H.x0,y0:H.y0,step:H.step,w:H.w,h:H.h,made:H.made,info:H.info||{},g,t:b.slice(off+2*N,off+3*N),c:b.slice(off+3*N,off+4*N),
+    lines:(H.lines||[]).map(l=>({kv:l.kv,h:l.h,p:l.p.map(([x,y])=>[x+H.x0,H.y0-y])}))};
+}
+/* zonos kampai lat/lon (rodymui) */
+function corners(G){ return [[G.x0,G.y0],[G.x0+G.w*G.step,G.y0],[G.x0+G.w*G.step,G.y0-G.h*G.step],[G.x0,G.y0-G.h*G.step]].map(([x,y])=>inv(x,y,G.zone)); }
+const kvTxt=kv=>kv?(kv>=1?Math.round(kv)+' kV':Math.round(kv*1000)+' V'):'linija';
+return {fwd,inv,zoneOf,xy,gAt,idx,inside,path,budget,cls,minAlt,routeAlt,wires,lineH,build,addLines,encode,decode,corners,kvTxt,Jnu,Wveg,ND};
+})();
+
 const LS='fpv_komanda_v1';
 const COL=['žalia','geltona','raudona'], RY=['Veikia','Sutrikimai','Neveikia'], TPV=['Taip','Dalinai','Ne'];
 const JAM=['Nėra','Ryšio / valdymo trikdymas','Vaizdo signalo praradimas / trikdžiai','GPS / navigacijos sutrikimas','Vėjas / oro sąlygos','Matomumas (tamsa / rūkas)','Baterija / maitinimas','Techninis dronų gedimas','Kitas orlaivis / dronas zonoje','Žmogiškoji klaida','Kita'];
-function defState(){return {v:1,set:{team:'FPV1',unit:'',call:'',pilots:'',drones:'',nightCams:'',curDr:'',night:false,curCam:'',bakRemind:false,vtx:'',retr:'',elrs:'ELRS 868',show:null,theme:'dark'},
+function defState(){return {v:1,set:{team:'FPV1',unit:'',call:'',pilots:'',drones:'',nightCams:'',curDr:'',night:false,curCam:'',bakRemind:false,vtx:'',retr:'',elrs:'ELRS 868',show:null,theme:'dark',rjAntH:'3',rjNeed:'6',rjAg:'7',rjBw:'70',rjAz:'',rjVtxW:'2,5',rjDh:'4',rjCtl:'k868',rjName:''},
   pos:null,places:[],targets:[],flights:[],seq:0,sent:[],last:{}};}
 let S=defState();
 try{const o=JSON.parse(localStorage.getItem(LS)||'null'); if(o&&o.set){S=Object.assign(defState(),o);S.set=Object.assign(defState().set,o.set);}}catch(e){}
@@ -318,6 +516,88 @@ async function copy(text){
   if(!ok){try{const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.top='0';ta.style.opacity='0';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,text.length);ok=document.execCommand('copy');ta.remove();}catch(e){}}
   return ok;
 }
+
+/* ============ RYŠIO SKAIČIAVIMAS (rajono failas iš TOC lentos) ============ */
+let RJG=null; const rjCache=new Map();
+const idbP=()=>new Promise((ok,no)=>{try{const r=indexedDB.open('fpv_komanda',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);}catch(e){no(e);}});
+async function idbPut(k,v){try{const db=await idbP();return await new Promise(r=>{const tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=()=>r(true);tx.onerror=()=>r(false);tx.onabort=()=>r(false);});}catch(e){return false;}}
+async function idbGet(k){try{const db=await idbP();return await new Promise(r=>{const q=db.transaction('h').objectStore('h').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null);});}catch(e){return null;}}
+async function rjBoot(){ try{ const u=await idbGet('rajonas'); if(u){ RJG=await RJ.decode(new Uint8Array(u)); rjCache.clear(); render(); } }catch(e){ RJG=null; } }
+const VB={A:[5865,5845,5825,5805,5785,5765,5745,5725],B:[5733,5752,5771,5790,5809,5828,5847,5866],E:[5705,5685,5665,5645,5885,5905,5925,5945],F:[5740,5760,5780,5800,5820,5840,5860,5880],R:[5658,5695,5732,5769,5806,5843,5880,5917],L:[5362,5399,5436,5473,5510,5547,5584,5621]};
+function chFreq(x){ const s=String(x||'').trim().toUpperCase().replace(',','.'); let m=s.match(/^([ABEFRL])\s*-?\s*([1-8])$/); if(m) return VB[m[1]][+m[2]-1];
+  m=s.match(/(\d+(?:\.\d+)?)\s*G(HZ)?\b/); if(m&&+m[1]>0.8&&+m[1]<7) return Math.round(+m[1]*1000);
+  m=s.match(/(\d{3,4})/); if(m&&+m[1]>=900&&+m[1]<=6500) return +m[1]; return null; }
+const num=(v,d)=>{const x=parseFloat(String(v??'').replace(',','.'));return isNaN(x)?d:x;};
+const CTL={k868:{n:'ELRS 868 MHz kryptinė 5 dBi',f:868,p:30,g:5,s:-115,bw:90},o868:{n:'ELRS 868 MHz lazdelė 2 dBi',f:868,p:30,g:2,s:-115,bw:360},o24:{n:'ELRS 2,4 GHz 2 dBi',f:2440,p:30,g:2,s:-108,bw:360},off:null};
+function rjOpt(vtx){ const s=S.set, fv=chFreq(vtx||s.vtx)||5800, W=num(s.rjVtxW,2.5)||2.5, c=CTL[s.rjCtl||'k868'];
+  const links=[{n:'Vaizdas',f:fv,p:10*Math.log10(W*1000),g:num(s.rjAg,7),s:-90,bw:num(s.rjBw,70)}]; if(c) links.push({...c,n:'Valdymas'});
+  const az=String(s.rjAz??'').trim();
+  return {links,gd:2,loss:3,az0:az===''?null:num(az,null),antH:Math.max(0.5,num(s.rjAntH,3)),dh:Math.max(0,num(s.rjDh,4)),need:num(s.rjNeed,6),fv,W,ctl:c};
+}
+const RJI={g:'🟢',y:'🟡',r:'🔴'};
+const sgn=x=>(x>=0?'+':'−')+Math.abs(Math.round(x));
+function rjFor(m,vtx){
+  if(!RJG||!m) return null; const P0=posMg(); if(!P0) return {why:'pos'};
+  const o=rjOpt(vtx), key=[P0.txt,m.txt||m.lat+','+m.lon,JSON.stringify(o)].join('|'); if(rjCache.has(key)) return rjCache.get(key);
+  const P=RJ.xy(RJG,P0.lat,P0.lon), T=RJ.xy(RJG,m.lat,m.lon); let r;
+  if(!RJ.inside(RJG,P.x,P.y)) r={why:'P'}; else if(!RJ.inside(RJG,T.x,T.y)) r={why:'T'};
+  else { const b=RJ.budget(RJG,P,o.antH,T,o.dh,o); r={b,o,P,T,P0,m,cls:RJ.cls(b.m,o.need)}; }
+  if(rjCache.size>300) rjCache.clear(); rjCache.set(key,r); return r;
+}
+const RJWHY={pos:'įvesk savo poziciją (📍 viršuje)',P:'jūsų pozicija už rajono failo ribų',T:'taikinys už rajono failo ribų'};
+function rjDetail(r){
+  if(r.det) return r.det; const {o,P,T}=r;
+  const ma=RJ.minAlt(RJG,P,o.antH,T,o,o.need), ma0=ma==null?RJ.minAlt(RJG,P,o.antH,T,o,0):ma;
+  const ra=RJ.routeAlt(RJG,P,o.antH,T,o,o.need), ra0=ra.h==null?RJ.routeAlt(RJG,P,o.antH,T,o,0):ra;
+  return r.det={ma,ma0,ra,ra0,top:RJ.budget(RJG,P,o.antH,T,600,o),w:RJ.wires(RJG,P,T,150)};
+}
+const wTxt=x=>RJ.kvTxt(x.kv)+' (~'+x.h+' m)';
+function rjShort(m,vtx){ const r=rjFor(m,vtx); if(!r) return ''; if(r.why) return '📡 '+RJWHY[r.why];
+  const d=rjDetail(r), b=r.b; let t=RJI[r.cls]+' '+sgn(b.m)+' dB';
+  if(d.ra.h!=null&&d.ra.h>r.o.dh+5) t+=' · kelyje ≥ '+d.ra.h+' m'; else if(d.ra.h==null) t+=' · kelyje ryšys nutrūks';
+  if(d.w.cross.length) t+=' · ⚡ '+d.w.cross.map(c=>RJ.kvTxt(c.kv)+' už '+km(c.d)+' km').slice(0,2).join(', ');
+  if(d.w.nearT.length) t+=' · ⚡ prie taikinio';
+  return t; }
+function rjPanel(name){
+  const t=tgByName(name), m=t?findMGRS(t.mg,defZB()):null; let h='';
+  if(!RJG) h='<div class="warn">Rajono failas neįkeltas.</div><div class="note">⚙ Nustatymai → 📡 Ryšio skaičiavimas → 📂 Įkelti rajono failą. Failą paruošia TOC lenta ir atsiunčia per Signal.</div>';
+  else if(!m) h='<div class="warn">'+esc(name)+' – be koordinačių. Įklijuok TOC žinutę su koordinatėmis.</div>';
+  else { const r=rjFor(m);
+    if(r.why) h='<div class="warn">'+esc(RJWHY[r.why])+'</div>';
+    else { const {b,o}=r, d=rjDetail(r), L=[];
+      const head=r.cls==='g'?'🟢 Ryšys yra – atsarga '+sgn(b.m)+' dB':r.cls==='y'?'🟡 Ties riba – atsarga '+sgn(b.m)+' dB (norima ≥ '+o.need+')':'🔴 Ryšio nėra – trūksta '+Math.abs(Math.round(b.m))+' dB';
+      L.push(esc(geoTxt(r.P0,m)));
+      L.push(b.links.map(k=>'<b>'+k.n+'</b> '+k.f+' MHz: '+sgn(k.m)+' dB').join(' · ')+' <span class="mut">(dronas '+o.dh+' m virš taikinio)</span>');
+      const ex=Math.max(...b.links.map(k=>k.ex)), wv=b.worst, kind=wv?['kalva','miškas','pastatai'][wv.kind]:'';
+      if(ex>=3&&wv){ const th=b.links.some(k=>k.thru&&k.ex>=3);
+        L.push('⛰ Kliūtis: <b>'+kind+'</b> už '+km(wv.d)+' km – '+(wv.h>=0?'kyšo '+Math.round(wv.h)+' m virš matymo linijos':'užstoja Frenelio zoną ('+Math.round(-wv.h)+' m žemiau linijos)')+(th&&b.veg>0?' · signalas eina pro mišką ~'+Math.round(b.veg)+' m':'')+' · −'+Math.round(ex)+' dB'); }
+      else L.push('⛰ Kliūčių beveik nėra');
+      const al=Math.max(...b.links.map(k=>k.al)); if(al>=1) L.push('📡 Antena nukreipta '+(o.az0==null?'':o.az0+'°, ')+'taikinys Az '+Math.round(b.az)+'° – prarandama '+Math.round(al)+' dB');
+      L.push(d.ma!=null?(d.ma<=o.dh?'🎯 Prie taikinio ryšys išlieka iki pat žemės':'🎯 Prie taikinio: ryšys su atsarga nuo <b>'+d.ma+' m</b> aukščio. Žemiau – '+(d.ma0!=null&&d.ma0<d.ma?'ties riba, nuo '+d.ma0+' m – nutrūksta':'nutrūksta')):
+        d.ma0!=null?'🎯 Atsargos net 600 m aukštyje nebus. Ryšys ties riba – nuo <b>'+d.ma0+' m</b>':'🎯 Ryšio nėra net 600 m aukštyje (geriausia: '+sgn(d.top.m)+' dB) – per toli šiai įrangai arba per aukšta kliūtis');
+      L.push(d.ra.h!=null?(d.ra.h<=o.dh+5?'✈ Kelyje kliūčių ryšiui nėra – galima skristi žemai':'✈ Kelyje skrisk <b>≥ '+d.ra.h+' m</b> virš žemės (sunkiausia vieta už '+km(d.ra.d)+' km)'):
+        d.ra0.h!=null?'✈ Kelyje su atsarga neišeis. Ryšys ties riba – skrisk ≥ <b>'+d.ra0.h+' m</b> (sunkiausia vieta už '+km(d.ra0.d)+' km)':'✈ Ryšys nutrūks ties '+km(d.ra0.d)+' km net aukštai');
+      if(!RJG.lines.length) L.push('<span class="mut">⚡ Elektros linijų rajono faile nėra</span>');
+      else { d.w.cross.forEach(c=>L.push('⚡ Kelyje už <b>'+km(c.d)+' km</b> – '+wTxt(c)+' → kirsk <b>≥ '+(c.h+20)+' m</b>'));
+        d.w.nearP.forEach(c=>L.push('⚡ Prie starto: '+wTxt(c)+' už <b>'+Math.round(c.d)+' m</b>'));
+        d.w.nearT.forEach(c=>L.push('⚡ Prie taikinio: '+wTxt(c)+' už <b>'+Math.round(c.d)+' m</b>'));
+        if(!d.w.cross.length&&!d.w.nearP.length&&!d.w.nearT.length) L.push('⚡ Žinomų elektros linijų kelyje nėra'); }
+      if(b.part) L.push('<span class="mut">Dalis kelio už rajono failo ribų – ten reljefas nevertintas</span>');
+      h=`<div class="rjh ${r.cls}">${head}</div><ul class="rjl">${L.map(x=>'<li>'+x+'</li>').join('')}</ul>
+        <div class="small mut">Skaičiuota: antena ${o.antH} m, ${o.links[0].g} dBi, ${o.links[0].bw}°${o.az0!=null?', kryptis '+o.az0+'°':''} · VTX ${String(o.W).replace('.',',')} W · valdymas ${o.ctl?esc(o.ctl.n):'nevertinamas'} · saugumo atsarga ${o.need} dB. Tikslumas apie ±5–6 dB. Laidai – tik žinomi, aukštis apytikslis. Keisti – ⚙.</div>
+        <div class="small mut" style="margin-top:4px">${esc(rjInfo())}</div>`; } }
+  openPanel('📡 '+name+' – ryšys',h+(t&&t.st==='ATIDARYTAS'?'<button class="c big" data-rjreq="1" style="width:100%;margin-top:12px">✈ REQ → '+esc(name)+'</button>':''),
+    ()=>{const q=document.querySelector('#shB [data-rjreq]'); if(q) q.onclick=()=>openForm('REQ',{tg:name});});
+}
+function rjInfo(){ if(!RJG) return 'Rajono failas neįkeltas'; const W=RJG.w*RJG.step/1000, H=RJG.h*RJG.step/1000, i=RJG.info||{}, d=RJG.made?new Date(RJG.made):null;
+  return 'Rajonas '+km(W*1000)+'×'+km(H*1000)+' km, tinklelis '+RJG.step+' m, elektros linijų '+RJG.lines.length+(i.src?' · '+i.src:'')+(d?' · paruošta '+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+hm(d):''); }
+$('#rjIn').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{ if(typeof DecompressionStream==='undefined') throw new Error('per sena naršyklė – atnaujink Chrome');
+    const u=new Uint8Array(await f.arrayBuffer()), G=await RJ.decode(u);
+    if(!(await idbPut('rajonas',u.buffer))) throw new Error('nepavyko įrašyti telefone');
+    RJG=G; S.set.rjName=f.name; save(); rjCache.clear(); render(); const el=$('#rjSt'); if(el) el.textContent=rjInfo(); const x=$('#rjX'); if(x) x.hidden=false;
+    toast('✓ '+rjInfo()); }
+  catch(x){ toast('⚠ '+(x&&x.message||'netinkamas failas')+' ('+f.name+')'); } };
 
 /* ============ PRANEŠIMAI ============ */
 const lab=(f,o)=>(f.lab&&f.lab[o])||o;
@@ -615,8 +895,10 @@ function migShow(sh,v){ if(!sh||typeof sh!=='object') return null;
   if(v===4){ const r=sh.REQ=sh.REQ||{}; ['pil','dr','cam','own','dist','l6'].forEach(k=>r[k]=false);
     const u=sh.UP=sh.UP||{}; ['tgm','own','dist','kan','pil','dr','cam'].forEach(k=>u[k]=true); v=5; }
   return v===SHOWV?sh:null; }
-function fixShow(){ const s=S.set, m=migShow(s.show,s.showV); s.show=m||presetShow('short'); s.showV=SHOWV;
-  if(s.grid&&typeof s.grid==='object') for(const k of Object.keys(s.grid)) if(!GRID.includes(k)) delete s.grid[k];
+function fixShow(){ const s=S.set;
+  /* seni / nežinomi mygtukų raktai įkeliant seną failą */
+  if(s.grid) for(const k of Object.keys(s.grid)) if(!GRID.includes(k)) delete s.grid[k];
+  const m=migShow(s.show,s.showV); s.show=m||presetShow('short'); s.showV=SHOWV;
   /* išmestų laukų likučiai */
   const has=(id,k)=>MSG[id]&&MSG[id].f.some(f=>f.k===k||f.sk===k);
   for(const id of Object.keys(s.show)){ if(!MSG[id]){delete s.show[id];continue;} for(const k of Object.keys(s.show[id])) if(!has(id,k)) delete s.show[id][k]; }
@@ -755,6 +1037,14 @@ const HELP={
  'SET.sSd':'Trumpas procedūros aprašymas – komandos jį mato paspaudusios ⓘ STOP formoje.',
  'SET.bang':'Raudonas ❗ žinutės pradžioje – kad Signal grupėje jūsų pranešimai išsiskirtų iš bendro pokalbio. TOC jį supranta.',
  'SET.file':'Atsarginė kopija telefone (Atsisiuntimuose / Downloads): nustatymai, taikiniai, skrydžiai, istorija. Atkurti: šioje programėlėje „📂 Įkelti failą“ → Atsisiuntimai → pasirink …_pratybos_….json. Telefono failų programoje paspaudus jis neatsidaro – tai normalu, jį skaito tik ši programėlė. Failas išsaugomas tik paspaudus 💾. Programėlė pati viską atsimena telefone (net neužbaigtą formą), failas – atsarginė kopija ar perkėlimui į naują versiją. Priminimą kas 30 min galima įjungti čia.',
+ 'SET.rj':'Rajono failą (aukščiai, miškas, elektros linijos) paruošia TOC lenta ir atsiunčia per Signal. Įkeli vieną kartą – jis lieka telefone. Tada taikinių sąraše prie kiekvieno taikinio matysi 🟢 / 🟡 / 🔴 ir atsargą dB, paspaudęs – kliūtis, reikiamą aukštį ir laidus. Skaičiuojama nuo jūsų pozicijos (📍). Niekas niekur nesiunčiama.',
+ 'SET.sAh':'Antžeminės (vaizdo ir valdymo) antenos aukštis virš žemės, m. Su stiebu – stiebo aukštis.',
+ 'SET.sNd':'Kiek dB atsargos laikyti „tikru“ ryšiu (🟢). Rekomenduojama 5–6 dB: reali VTX galia, antenos kryptis, drėgmė dažnai „suvalgo“ kelis dB. 0…atsarga – 🟡 ties riba, mažiau 0 – 🔴.',
+ 'SET.sAg':'Vaizdo imtuvo antenos stiprumas: patch ~7–8 dBi, helix ~12 dBi, lazdelė ~2 dBi.',
+ 'SET.sAb':'Antenos spindulio plotis laipsniais: patch ~60–70°, helix ~30–40°, lazdelė – 360 (visakryptė).',
+ 'SET.sAz':'Jei antena pastatyta nejudinama – jos kryptis (azimutas) laipsniais. Tada taikiniai šone gaus mažiau signalo. Tuščia – laikoma, kad anteną nukreipsite į taikinį.',
+ 'SET.sVw':'Drono vaizdo siųstuvo (VTX) galia vatais, pvz. 1, 1,6, 2,5.',
+ 'SET.sDh':'Kokiame aukštyje dronas būna prie taikinio (puolant), m. Pagal tai skaičiuojama spalva 🟢🟡🔴.',
  'SET.share':'Nukopijuok kodą ir nusiųsk kitoms komandoms – jos įklijuos ir turės tokius pat rodomus punktus.'
 };
 Object.defineProperty(HELP,'STOP',{get:()=>'Saugos procedūra „'+stopWord()+'“: '+(S.set.stopDesc??STOP_DEF.desc)});
@@ -766,6 +1056,7 @@ const GUIDE=`<ol class="guide">
 <li><b>✈ REQ</b> – įrašyk taikinio Nr. (pvz. 12) arba įklijuok TOC žinutę, arba pasirink iš sąrašo → <b>📋 Kopijuoti</b> → įklijuok į Signal grupę (arba <b>↗ Siųsti</b>).</li>
 <li>REQ – trumpas (komanda ir taikinys). Kai TOC Signal'e leidžia – spausk <b>⬆️ Kylame</b>: jame visa skrydžio informacija (pilotas, dronas, kamera, kanalai, pozicija) → Kopijuoti → Signal.</li>
 <li>Po skrydžio – <b>⬇️ Rezultatas</b> → Kopijuoti → Signal.</li>
+<li><b>📡 Ryšys su taikiniu</b> – įkėlus TOC atsiųstą rajono failą (⚙ → 📡), taikinių sąraše matysi 🟢 / 🟡 / 🔴. Paspausk – kliūtys, nuo kokio aukščio išlieka ryšys, kokiame aukštyje skristi, elektros linijos kelyje.</li>
 <li>Kiti pranešimai – SITREP, Pozicija, SALUTE, Priešo dronas, Kontaktas, Trukdžiai, Poreikis (LOGREP), STOP, UXO, Patikra, MEDEVAC. Kurie rodomi – ⚙.</li>
 </ol>
 <div class="note">Koordinates galima įvesti ne tik MGRS: platuma / ilguma (<span class="mono">55.12345, 24.12345</span> arba <span class="mono">55°07'24.4"N 24°07'24.4"E</span>), LKS-94 (<span class="mono">LKS 6109758 507874</span>) ar UTM – programėlė pati perskaičiuos ir į žinutę įrašys MGRS.</div>
@@ -848,10 +1139,10 @@ function upd(){
   const M=MSG[F.id], v=vals();
   for(const f of M.f.filter(vis)){
     if(f.ty==='mg'){const e=$('#mi_'+f.k), x=F.v[f.k]; if(e){ const m=x?findMGRS(x,defZB()):null;
-      e.innerHTML=!x?'':m?`<span class="ok">✓ ${esc(m.txt)}</span>${m.src?' <span class="mut">← iš '+esc(m.src)+'</span>':''}${f.k!=='own'&&posMg()?' <span class="mut">· '+esc(geoTxt(posMg(),m))+'</span>':''}`:'<span class="er">⚠ neatpažinta – patikrink (pvz. 35U LB 16583 12307 arba 55.12345 24.12345)</span>';
+      e.innerHTML=!x?'':m?`<span class="ok">✓ ${esc(m.txt)}</span>${m.src?' <span class="mut">← iš '+esc(m.src)+'</span>':''}${f.k!=='own'&&posMg()?' <span class="mut">· '+esc(geoTxt(posMg(),m))+'</span>':''}`:'<span class="er">⚠ neatpažinta – patikrink (pvz. 35U LA 12345 67890 arba 55.00000 24.00000)</span>';
       const inp=$('#f_'+f.k); if(inp) inp.classList.toggle('bad',!!x&&!m);}}
     if(f.ty==='auto'){const e=$('#au_'+f.k); if(e) e.textContent=v[f.k]||'– (reikia abiejų koordinačių)';}
-    if(f.ty==='tg'){const e=$('#tgi'); if(e){const t=F.v.tg, m=findMGRS(F.v.tgm,defZB()); e.innerHTML=!t?'<span class="mut">pasirink žemiau arba įrašyk Nr.</span>':t==='TESTAS'?'<span class="ok">✓ testinis skrydis</span>':'<span class="ok">✓ '+esc(t)+'</span> '+(m?'<span class="mut">· '+esc(m.txt)+(posMg()?' · '+esc(geoTxt(posMg(),m).split(' · ').slice(0,2).join(' · ')):'')+'</span>':'<span class="mut">· be koordinačių (TOC atpažins pagal Nr.)</span>');}}
+    if(f.ty==='tg'){const e=$('#tgi'); if(e){const t=F.v.tg, m=findMGRS(F.v.tgm,defZB()); e.innerHTML=!t?'<span class="mut">pasirink žemiau arba įrašyk Nr.</span>':t==='TESTAS'?'<span class="ok">✓ testinis skrydis</span>':'<span class="ok">✓ '+esc(t)+'</span> '+(m?'<span class="mut">· '+esc(m.txt)+(posMg()?' · '+esc(geoTxt(posMg(),m).split(' · ').slice(0,2).join(' · ')):'')+'</span>'+(RJG?'<div class="small" style="margin-top:4px">📡 '+esc(rjShort(m,F.v.vtx))+'</div>':''):'<span class="mut">· be koordinačių (TOC atpažins pagal Nr.)</span>');}}
     if(f.ty==='cyc'){const e=document.querySelector('[data-cyc="'+f.k+'"]'); if(e){const c=v[f.k]||''; e.dataset.col=c; e.querySelector('b').textContent=c||'–';}}
     const nd=$('#nd_'+f.k); if(nd) nd.textContent=f.req&&(v[f.k]===undefined||v[f.k]==='')?'būtina':'';
   }
@@ -927,7 +1218,7 @@ function renderPos(){
 $('#posbar').onclick=()=>dlgPos();
 function dlgPos(){
   openPanel('📍 Mūsų pozicija',`
-   <div class="fld"><label>MGRS arba platuma ilguma</label><div class="mgf"><input id="pIn" class="mono" value="${esc(S.pos?S.pos.mg:'')}" placeholder="35U LB 16583 12307" autocapitalize="characters"><button id="pGps" class="b">📡 GPS</button></div><div class="mgi" id="pInf"></div></div>
+   <div class="fld"><label>MGRS arba platuma ilguma</label><div class="mgf"><input id="pIn" class="mono" value="${esc(S.pos?S.pos.mg:'')}" placeholder="35U LA 12345 67890" autocapitalize="characters"><button id="pGps" class="b">📡 GPS</button></div><div class="mgi" id="pInf"></div></div>
    <button class="g big" id="pOk" style="width:100%">✓ Naudoti šią poziciją</button>
    <div class="small mut" style="margin:8px 0 14px">GPS gali būti trukdomas – tada įvesk koordinates ranka iš žemėlapio.</div>
    <h3 style="font-size:16px;margin:10px 0 6px">Išsaugotos vietos</h3>
@@ -1044,6 +1335,16 @@ function dlgSettings(focusId){
    <div class="row" style="margin-bottom:8px"><button id="prS">Trumpas (pratyboms)</button><button id="prF">Pilnas (NATO)</button></div>
    <div class="small mut" style="margin-bottom:8px">🔒 – būtini punktai (TOC be jų neatpažins).</div>
    ${secs}
+   <h3 style="font-size:16px;margin:16px 0 8px">${hlab('SET.rj','📡 Ryšio skaičiavimas (taikinio pasiekiamumas)')}</h3>
+   <div class="note small" id="rjSt">${esc(rjInfo())}</div>
+   <div class="row" style="margin-bottom:10px"><button data-rjl="1">📂 Įkelti rajono failą</button><button class="ghost" id="rjX" data-rjx="1" ${RJG?'':'hidden'}>✕ Pašalinti</button></div>
+   <div class="two">${inp('sAh','Antenos aukštis, m',s.rjAntH,'inputmode="decimal"')}${inp('sNd','Saugumo atsarga, dB',s.rjNeed,'inputmode="decimal"')}</div>
+   <div class="two">${inp('sAg','Vaizdo antenos stiprumas, dBi',s.rjAg,'inputmode="decimal"')}${inp('sAb','Kryptingumo kampas, °',s.rjBw,'inputmode="numeric"')}</div>
+   <div class="two">${inp('sAz','Antenos kryptis, ° (tuščia – į taikinį)',s.rjAz,'inputmode="numeric"')}${inp('sVw','VTX galia, W',s.rjVtxW,'inputmode="decimal"')}</div>
+   <div class="two">${inp('sDh','Drono aukštis prie taikinio, m',s.rjDh,'inputmode="decimal"')}<div></div></div>
+   <div class="glab">Valdymo ryšys:</div>
+   <div class="seg" style="margin-bottom:6px">${[['k868','868 kryptinė'],['o868','868 lazdelė'],['o24','2,4 GHz'],['off','Nevertinti']].map(([k,n])=>`<button type="button" data-ct="${k}" class="${(s.rjCtl||'k868')===k?'on':''}">${n}</button>`).join('')}</div>
+   <div class="small mut" style="margin-bottom:6px">Vaizdo dažnis – iš „Video kanalas“${chFreq(s.vtx)?' (dabar '+esc(s.vtx)+' → '+chFreq(s.vtx)+' MHz)':' (neįrašytas – skaičiuojama 5,8 GHz)'}. Kylant su kitu kanalu – skaičiuojama pagal ⬆️ formos kanalą.</div>
    <h3 style="font-size:16px;margin:16px 0 8px">${hlab('SET.share','Bendrinti nustatymus kitoms komandoms')}</h3>
    <div class="small mut" style="margin-bottom:6px">Kodas perduoda rodomus punktus, mygtukus, STOP pranešimą, REQ režimą, dalinį ir valdymą (be komandos pavadinimo, pilotų, dronų, kanalų).</div>
    <button id="exC" style="width:100%">📤 Kopijuoti nustatymų kodą</button>
@@ -1063,7 +1364,8 @@ function dlgSettings(focusId){
    <div class="small mut" style="margin-top:6px">Nustatymai ir išsaugotos vietos lieka. Duomenys niekur nesiunčiami – tik tai, ką pats įklijuoji į Signal.</div>
    <button class="g big" id="sOk" style="width:100%;margin-top:16px">✓ Išsaugoti</button>`,()=>{
     const rd=()=>{Object.assign(s,{team:$('#sT').value.trim().toUpperCase()||'FPV1',unit:$('#sU').value.trim(),call:$('#sC').value.trim(),pilots:$('#sP').value,drones:$('#sD').value,nightCams:$('#sN').value,vtx:$('#sV').value.trim().toUpperCase(),retr:$('#sR').value.trim().toUpperCase(),elrs:$('#sE').value.trim(),
-        stopWord:$('#sSw').value.trim().toUpperCase()||'STOP',stopSt:$('#sSs').value.trim()||STOP_DEF.st,stopLines:$('#sSl').value,stopDesc:$('#sSd').value.trim()});
+        stopWord:$('#sSw').value.trim().toUpperCase()||'STOP',stopSt:$('#sSs').value.trim()||STOP_DEF.st,stopLines:$('#sSl').value,stopDesc:$('#sSd').value.trim(),
+        rjAntH:$('#sAh').value.trim(),rjNeed:$('#sNd').value.trim(),rjAg:$('#sAg').value.trim(),rjBw:$('#sAb').value.trim(),rjAz:$('#sAz').value.trim(),rjVtxW:$('#sVw').value.trim(),rjDh:$('#sDh').value.trim()}); rjCache.clear();
       s.grid=s.grid||{}; document.querySelectorAll('[data-grid]').forEach(c=>{s.grid[c.dataset.grid]=c.checked;});
       document.querySelectorAll('[data-shid]').forEach(c=>{s.show[c.dataset.shid]=s.show[c.dataset.shid]||{};s.show[c.dataset.shid][c.dataset.shk]=c.checked;});};
     $('#prS').onclick=()=>{rd();s.show=presetShow('short');save();dlgSettings();toast('Trumpas rinkinys');};
@@ -1071,6 +1373,9 @@ function dlgSettings(focusId){
     $('#exC').onclick=async()=>{rd();save();const code='KN1:'+btoa(unescape(encodeURIComponent(JSON.stringify({show:s.show,showV:SHOWV,unit:s.unit,elrs:s.elrs,grid:s.grid,needReq:s.needReq,stopWord:s.stopWord,stopSt:s.stopSt,stopLines:s.stopLines,stopDesc:s.stopDesc}))));toast(await copy(code)?'Kodas nukopijuotas – siųsk komandoms':'Nepavyko nukopijuoti');};
     $('#imB').onclick=()=>{try{const v=$('#imC').value.trim();if(!v.startsWith('KN1:'))throw 0;const o=JSON.parse(decodeURIComponent(escape(atob(v.slice(4)))));rd();
         if(o.show){ s.show=migShow(o.show,o.showV||3)||presetShow('short'); s.showV=SHOWV; } ['unit','elrs','grid','needReq','stopWord','stopSt','stopLines','stopDesc'].forEach(k=>{if(o[k]!==undefined)s[k]=o[k];}); save(); dlgSettings(); toast('✓ Nustatymai pritaikyti');}catch(e){toast('Netinkamas kodas');}};
+    document.querySelectorAll('[data-ct]').forEach(b=>b.onclick=()=>{s.rjCtl=b.dataset.ct;document.querySelectorAll('[data-ct]').forEach(x=>x.classList.toggle('on',x===b));});
+    document.querySelectorAll('#shB [data-rjl]').forEach(b=>b.onclick=()=>$('#rjIn').click());
+    document.querySelectorAll('#shB [data-rjx]').forEach(b=>b.onclick=async()=>{if(!confirm('Pašalinti rajono failą iš telefono?'))return; await idbPut('rajonas',null); RJG=null; rjCache.clear(); S.set.rjName=''; save(); $('#rjSt').textContent=rjInfo(); b.hidden=true; toast('Rajono failas pašalintas');});
     document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{s.bakRemind=b.dataset.rm==='1';document.querySelectorAll('[data-rm]').forEach(x=>x.classList.toggle('on',x===b));});
     document.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{s.bang=b.dataset.bg==='1';document.querySelectorAll('[data-bg]').forEach(x=>x.classList.toggle('on',x===b));});
     document.querySelectorAll('#shB [data-bak]').forEach(b=>b.onclick=()=>{rd();save();saveFile();});
@@ -1124,7 +1429,7 @@ function render(){
   const P=posMg(), L=openTg().map(t=>{const m=findMGRS(t.mg,defZB());return {t,m,d:P&&m?mDist(P,m):null};}).sort((a,b)=>(b.t.mine||0)-(a.t.mine||0)||(a.d??1e12)-(b.d??1e12));
   $('#tgCnt').textContent=L.length?'('+L.length+')':'';
   $('#tgs').innerHTML=L.map(({t,m,d})=>`<div class="tg"><span class="nm">${esc(t.name)}</span><div class="inf"><div>${t.st!=='ATIDARYTAS'?'<span class="badge b-'+t.st+'">'+t.st+'</span> ':''}${t.mine?'<span class="badge">mums</span> ':''}${t.sq?'<span class="small mut">kv. '+esc(t.sq)+'</span>':''}</div>
-     <div class="mono" data-cp="${esc(t.mg)}">${t.mg?esc(t.mg):'<span class="mut">be koordinačių</span>'}</div>${d!=null?`<div class="small">${esc(geoTxt(P,m))}</div>`:''}</div>
+     <div class="mono" data-cp="${esc(t.mg)}">${t.mg?esc(t.mg):'<span class="mut">be koordinačių</span>'}</div>${d!=null?`<div class="small">${esc(geoTxt(P,m))}</div>`:''}${RJG&&m?(r=>r?`<span class="rjb" data-rjt="${esc(t.name)}">${r.why?'📡 <small>'+esc(RJWHY[r.why])+'</small>':RJI[r.cls]+' '+sgn(r.b.m)+' dB <small>ryšys ›</small>'}</span>`:'')(rjFor(m)):''}</div>
      ${t.st==='ATIDARYTAS'?`<button class="c sm" data-req="${esc(t.name)}">REQ</button>`:''}<button class="sm ghost" data-tdel="${esc(t.name)}">✕</button></div>`).join('')||'<div class="mut small">Įrašyk Nr. arba įklijuok TOC žinutę su taikiniais. Taikinį galima įrašyti ir tiesiai REQ formoje.</div>';
   const H=S.sent.slice(0,histAll?30:5);
   $('#hist').innerHTML=(H.map((m,i)=>`<div class="m"><span class="small mut">${hm(m.t)}</span><pre data-op="${i}">${esc(m.text)}</pre><button class="sm" data-again="${i}">📋</button></div>`).join('')||'<div class="mut small">Dar nieko</div>')
@@ -1134,7 +1439,7 @@ function render(){
 document.addEventListener('click',async e=>{
   if($('#sheet').hidden===false&&e.target.closest('#sheet')) return;
   if(e.target.closest('#bakbar')){ saveFile(); return; }
-  const b=e.target.closest('[data-go],[data-pil],[data-piladd],[data-dr],[data-dradd],[data-night],[data-cam],[data-camadd],[data-bak],[data-load],[data-hall],[data-req],[data-tdel],[data-again],[data-op],[data-cp]'); if(!b) return; const d=b.dataset;
+  const b=e.target.closest('[data-rjt],[data-go],[data-pil],[data-piladd],[data-dr],[data-dradd],[data-night],[data-cam],[data-camadd],[data-bak],[data-load],[data-hall],[data-req],[data-tdel],[data-again],[data-op],[data-cp]'); if(!b) return; const d=b.dataset;
   if(d.hall){histAll=!histAll;render();return;}
   if(d.go){ const a=active();
     if(d.go==='CANCEL'&&!confirm('Atšaukti skrydį #'+a.fid+'?')) return;
@@ -1153,6 +1458,7 @@ document.addEventListener('click',async e=>{
   if(d.camadd){ const n=(prompt('Naktinės kameros pavadinimas (pvz. Termo-1)')||'').trim(); if(!n) return; const L=list(S.set.nightCams); if(!L.includes(n)) L.push(n); S.set.nightCams=L.join(', '); S.set.curCam=n; save(); renderDr(); drToast(); return; }
   if(d.bak){ saveFile(); return; }
   if(d.load){ $('#fileIn').click(); return; }
+  if(d.rjt){rjPanel(d.rjt); return;}
   if(d.req){openForm('REQ',{tg:d.req}); return;}
   if(d.tdel){if(!confirm('Pašalinti '+d.tdel+'?'))return; S.targets=S.targets.filter(t=>t.name!==d.tdel); save(); render(); return;}
   if(d.again){toast(await copy(S.sent[+d.again].text)?'Nukopijuota dar kartą':'Nepavyko nukopijuoti'); return;}
@@ -1162,7 +1468,7 @@ document.addEventListener('click',async e=>{
 function tick(){const d=new Date();$('#hClk').textContent=pad(d.getHours())+':'+pad(d.getMinutes());
   document.querySelectorAll('[data-since]').forEach(e=>{const t=+e.dataset.since;e.textContent=t?dur(Date.now()-t):'';});}
 setInterval(tick,1000); setInterval(()=>{renderPos();renderBak();},60000);
-render(); restoreDraft();
+render(); restoreDraft(); rjBoot();
 try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
 if(!localStorage.getItem(LS)) setTimeout(()=>{toast('Pirmiausia ⚙ – įrašyk komandos pavadinimą (arba 📂 įkelk pratybų failą)');},600);
 if('serviceWorker' in navigator&&window.isSecureContext&&location.protocol!=='file:') navigator.serviceWorker.register('sw.js').catch(()=>{});
